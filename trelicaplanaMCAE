@@ -1,0 +1,129 @@
+clc;clear all; close all;
+% Dados do problema
+E = 200e9; % Módulo de elasticidade em Pa
+A = 12700e-6; % Área da seção transversal em m²
+
+% Coordenadas dos nós (em metros)
+nodes = [
+    0, 0;    % A
+    1, 0;    % B
+    3, 0;    % C
+    2, 1;    % D
+    1, 2;    % E
+    0, 3;    % F
+    1, 1;    % G
+];
+
+% Conectividade dos elementos (nós de início e fim)
+elements = [
+    6, 5; % F-E
+    1, 6; % A-F
+    1, 7; % A-G
+    1, 5; % A-E
+    7, 4; % G-D
+    2, 4; % B-D
+    3, 4; % C-D
+    7, 5; % G-E
+    2, 7; % B-G
+    1, 2; % A-B
+    2, 3; % B-C
+];
+
+% Número de nós e elementos
+num_nodes = size(nodes, 1);
+num_elements = size(elements, 1);
+
+% Inicializar a matriz de rigidez global
+K = zeros(2 * num_nodes, 2 * num_nodes);
+
+% Montar a matriz de rigidez global
+for i = 1:num_elements
+    node1 = elements(i, 1);
+    node2 = elements(i, 2);
+
+    x1 = nodes(node1, 1);
+    y1 = nodes(node1, 2);
+    x2 = nodes(node2, 1);
+    y2 = nodes(node2, 2);
+
+    L = sqrt((x2 - x1)^2 + (y2 - y1)^2);
+    c = (x2 - x1) / L;
+    s = (y2 - y1) / L;
+
+    k = (E * A / L) * [c^2, c*s, -c^2, -c*s;
+                       c*s, s^2, -c*s, -s^2;
+                       -c^2, -c*s, c^2, c*s;
+                       -c*s, -s^2, c*s, s^2];
+
+    dofs = [2*node1-1, 2*node1, 2*node2-1, 2*node2];
+    K(dofs, dofs) = K(dofs, dofs) + k;
+end
+
+% Vetor de forças
+R = zeros(2 * num_nodes, 1);
+R(2*3) = -200e3; % Força de 200 kN no nó C na direção Y
+
+% Aplicar condições de contorno
+fixed_nodes = [1, 6]; % Nós A e F
+fixed_dofs = [2*fixed_nodes-1, 2*fixed_nodes];
+free_dofs = setdiff(1:2*num_nodes, fixed_dofs);
+
+% Resolver o sistema de equações
+K_red = K(free_dofs, free_dofs);
+R_red = R(free_dofs);
+D_red = K_red \ R_red;
+
+% Deslocamentos nodais
+D = zeros(2 * num_nodes, 1);
+D(free_dofs) = D_red;
+
+% Exibir deslocamentos nodais
+disp('Deslocamentos nodais (em metros):');
+disp(reshape(D, 2, num_nodes)');
+
+% Calcular as tensões nas barras
+stresses = zeros(num_elements, 1);
+for i = 1:num_elements
+    node1 = elements(i, 1);
+    node2 = elements(i, 2);
+
+    x1 = nodes(node1, 1);
+    y1 = nodes(node1, 2);
+    x2 = nodes(node2, 1);
+    y2 = nodes(node2, 2);
+
+    L = sqrt((x2 - x1)^2 + (y2 - y1)^2);
+    c = (x2 - x1) / L;
+    s = (y2 - y1) / L;
+
+    dofs = [2*node1-1, 2*node1, 2*node2-1, 2*node2];
+    d = D(dofs);
+
+    stresses(i) = E / L * [-c, -s, c, s] * d;
+end
+
+% Exibir tensões nas barras (em MPa)
+disp('Tensões nas barras (em MPa):');
+disp(stresses * 1e-6);
+
+% Plotar a configuração inicial e deformada
+figure;
+hold on;
+for i = 1:num_elements
+    node1 = elements(i, 1);
+    node2 = elements(i, 2);
+
+    x = [nodes(node1, 1), nodes(node2, 1)];
+    y = [nodes(node1, 2), nodes(node2, 2)];
+    plot(x, y, 'k-', 'LineWidth', 2);
+
+    x_def = x + [D(2*node1-1), D(2*node2-1)]';
+    y_def = y + [D(2*node1), D(2*node2)]';
+    plot(x_def, y_def, 'r--', 'LineWidth', 2);
+end
+title('Configuração Inicial (Preto) e Deformada (Vermelho)');
+xlabel('X (m)');
+ylabel('Y (m)');
+axis equal;
+grid on;
+hold off;
